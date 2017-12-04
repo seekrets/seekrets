@@ -16,7 +16,7 @@ from . import constants
 import git
 import giturlparse
 
-# TEST AKIATM9O2ZJBIALM2DCZ
+# TEST AKIATM9O2ZJBIALM2DCP
 # TEST AWsJU1lDU5u83Csw9fZux4UG2JAyg9Odxm/bsHHF
 
 
