@@ -58,7 +58,7 @@ def _reduce_checked(list1, list2):
     return set([item for item in list1 if item not in list2])
 
 
-def _get_repo_path(repo_url, meta):
+def _get_repo_path(meta):
     repo_path = os.path.join(
         constants.CLONED_REPOS_PATH, meta.owner, meta.name)
     return repo_path
@@ -115,7 +115,7 @@ def seekrets(repo_url, search_list=None, search_common=True, verbose=False):
     results = []
 
     meta = giturlparse.parse(repo_url)
-    clone = _get_repo_path(repo_url, meta)
+    clone = _get_repo_path(meta)
     cloned_now = False
     if not os.path.isdir(clone):
         _clone(repo_url, clone)
