@@ -31,5 +31,7 @@ setup(
     install_requires=[
         "sh==1.11",
         "click==6.6",
+        "gitpython",
+        "git-url-parse",
     ]
 )

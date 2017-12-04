@@ -16,7 +16,7 @@ from . import constants
 import git
 import giturlparse
 
-# TEST AKIATM9O2ZJBIALM2DCA
+# TEST AKIATM9O2ZJBIALM2DCZ
 # TEST AWsJU1lDU5u83Csw9fZux4UG2JAyg9Odxm/bsHHF
 
 
@@ -34,11 +34,13 @@ def _clone(repo_url, repo_path):
 
 def _pull(repo, branch):
     logger.info('Pulling %s...', branch.name)
+    # TODO: Should use this.. but it's weirdly not working
     # repo.remotes.origin.pull()
     sh.git.pull()
 
 
 def _get_branches(repo):
+    logger.info('Retrieving branches...')
     return repo.remotes.origin.fetch()
 
 
@@ -47,10 +49,12 @@ def _get_branch_name(branch):
 
 
 def _checkout(repo, branch, branch_name):
+    logger.info('Checking out %s...', branch_name)
     repo.git.checkout(branch)
 
 
 def _get_commits(repo):
+    logger.info('Getting all commits...')
     return repo.iter_commits()
 
 
@@ -64,7 +68,19 @@ def _get_repo_path(meta):
     return repo_path
 
 
-def _search(meta, commit, diff, record, search_type='common'):
+def _search_commit(branch, meta, commit, previous_commit, search_type='common', strings=None):
+    diff = previous_commit.diff(commit, create_patch=True)
+    record = {
+        'commit_sha': commit.hexsha,
+        'commit_date': commit.committed_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+        'committer_email': commit.committer.email,
+        'committer_username': commit.committer.name,
+        'commit_msg': commit.message,
+        'branch': branch.name,
+        'repo': meta.name,
+        'org': meta.owner,
+        'risks': [],
+    }
     for index, blob in enumerate(diff):
         data = blob.diff.decode('utf-8', errors='replace')
         blob_parts = [meta.href.replace('.git', ''), 'blob', commit.hexsha]
@@ -85,6 +101,37 @@ def _search(meta, commit, diff, record, search_type='common'):
                     {'blob_url': blob_url, 'strings': result, 'type': 'custom'})
 
     return record
+
+
+def _search_branches(repo, cloned_now, search_common=True):
+    results = []
+    reduction_list = []
+
+    for branch in _get_branches(repo):
+        logger.info('Searching %s...', branch)
+        if not branch.name == 'origin/master':
+            continue
+        if not cloned_now:
+            _pull(repo, branch)
+        branch_name = _get_branch_name(branch)
+        _checkout(repo, branch, branch_name)
+        commits = _get_commits(repo)
+        commits = _reduce_checked(commits, reduction_list)
+        # TODO: Move to _seek_commits()
+        previous_commit = None
+        for commit in commits:
+            reduction_list.append(commit)
+            if not previous_commit:
+                pass
+            else:
+                if search_common:
+                    record = _search_commit(
+                        branch, repo.meta, commit, previous_commit)
+                    if record.get('risks'):
+                        results.append(record)
+            previous_commit = commit
+        logger.info('Searched %s commits.', len(reduction_list))
+    return results
 
 
 def seekrets(repo_url, search_list=None, search_common=True, verbose=False):
@@ -112,8 +159,6 @@ def seekrets(repo_url, search_list=None, search_common=True, verbose=False):
         ...
     }
     """
-    results = []
-
     meta = giturlparse.parse(repo_url)
     clone = _get_repo_path(meta)
     cloned_now = False
@@ -121,41 +166,8 @@ def seekrets(repo_url, search_list=None, search_common=True, verbose=False):
         _clone(repo_url, clone)
         cloned_now = True
     repo = git.Repo(clone)
-    reduction_list = []
-    # Move to _seek_branches()
-    for branch in _get_branches(repo):
-        if not branch.name == 'origin/master':
-            continue
-        if not cloned_now:
-            _pull(repo, branch)
-        branch_name = _get_branch_name(branch)
-        _checkout(repo, branch, branch_name)
-        commits = _get_commits(repo)
-        commits = _reduce_checked(commits, reduction_list)
-        # TODO: Move to _seek_commits()
-        previous_commit = None
-        for commit in commits:
-            reduction_list.append(commit)
-            if not previous_commit:
-                pass
-            else:
-                diff = previous_commit.diff(commit, create_patch=True)
-                record = {
-                    'commit_sha': commit.hexsha,
-                    'commit_date': commit.committed_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
-                    'committer_email': commit.committer.email,
-                    'committer_username': commit.committer.name,
-                    'commit_msg': commit.message,
-                    'branch': branch.name,
-                    'repo': meta.name,
-                    'org': meta.owner,
-                    'risks': [],
-                }
-                if search_common:
-                    populated_record = _search(
-                        meta, commit, diff, record)
-                    if populated_record.get('risks'):
-                        results.append(populated_record)
-            previous_commit = commit
+    repo.meta = meta
+
+    results = _search_branches(repo, cloned_now)
     print(json.dumps(results, indent=4))
     return results
