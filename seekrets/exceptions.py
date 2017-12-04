@@ -1,0 +1,2 @@
+class SeekretsError(Exception):
+    pass
