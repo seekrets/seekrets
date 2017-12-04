@@ -53,9 +53,10 @@ def _checkout(repo, branch, branch_name):
     repo.git.checkout(branch)
 
 
-def _get_commits(repo):
+def _get_commits(repo, searched):
     logger.info('Getting all commits...')
-    return repo.iter_commits()
+    commits = repo.iter_commits()
+    return set([c for c in commits if c not in searched])
 
 
 def _reduce_checked(list1, list2):
@@ -103,24 +104,22 @@ def _search_commit(branch, meta, commit, previous_commit, search_type='common', 
     return record
 
 
-def _search_branches(repo, cloned_now, search_common=True):
-    results = []
-    reduction_list = []
+def _search_branches(repo, search_common=True):
+    found = []
+    searched = []
 
     for branch in _get_branches(repo):
         logger.info('Searching %s...', branch)
-        if not branch.name == 'origin/master':
-            continue
-        if not cloned_now:
+
+        if not repo.cloned_now:
             _pull(repo, branch)
         branch_name = _get_branch_name(branch)
         _checkout(repo, branch, branch_name)
-        commits = _get_commits(repo)
-        commits = _reduce_checked(commits, reduction_list)
-        # TODO: Move to _seek_commits()
+
+        commits = _get_commits(repo, searched)
         previous_commit = None
         for commit in commits:
-            reduction_list.append(commit)
+            searched.append(commit)
             if not previous_commit:
                 pass
             else:
@@ -128,10 +127,12 @@ def _search_branches(repo, cloned_now, search_common=True):
                     record = _search_commit(
                         branch, repo.meta, commit, previous_commit)
                     if record.get('risks'):
-                        results.append(record)
+                        found.append(record)
             previous_commit = commit
-        logger.info('Searched %s commits.', len(reduction_list))
-    return results
+
+        logger.info('Searched %s commits.', len(searched))
+
+    return found
 
 
 def seekrets(repo_url, search_list=None, search_common=True, verbose=False):
@@ -167,7 +168,8 @@ def seekrets(repo_url, search_list=None, search_common=True, verbose=False):
         cloned_now = True
     repo = git.Repo(clone)
     repo.meta = meta
+    repo.cloned_now = cloned_now
 
-    results = _search_branches(repo, cloned_now)
+    results = _search_branches(repo)
     print(json.dumps(results, indent=4))
     return results
