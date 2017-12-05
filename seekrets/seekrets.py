@@ -34,9 +34,14 @@ search_string = click.option(
     help='String you would like to search for. '
          'This can be passed multiple times')
 search_common = click.option(
-    '--search-common',
-    default=True,
+    '--skip-common',
+    default=False,
     help='Whether to search for common patterns as well. Defaults to True')
+no_pull = click.option(
+    '--no-pull',
+    is_flag=True,
+    default=False,
+    help='Whether to skip pulling changes when the repository already exists')
 verbose = click.option('-v', '--verbose', default=False, is_flag=True)
 
 
@@ -49,8 +54,9 @@ def main():
 @click.argument('REPO_URL')
 @search_string
 @search_common
+@no_pull
 @verbose
-def seekrets_repo(repo_url, string, search_common, verbose):
+def seekrets_repo(repo_url, string, skip_common, no_pull, verbose):
     """Search a single repository.
     You can add user_name and password. Used seekrets like that:
 
@@ -60,7 +66,8 @@ def seekrets_repo(repo_url, string, search_common, verbose):
         repo.seekrets(
             repo_url=repo_url,
             search_list=string,
-            search_common=search_common,
+            skip_common=skip_common,
+            no_pull=no_pull,
             verbose=verbose)
     except SeekretsError as ex:
         sys.exit(ex)

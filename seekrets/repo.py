@@ -27,9 +27,9 @@ COMMON_EXPRESSIONS = {
 logger = utils.setup_logger()
 
 
-def _clone(repo_url, repo_path):
-    logger.info('Cloning %s to %s...', repo_url, repo_path)
-    git.Repo.clone_from(repo_url, repo_path)
+def _clone(source, destination):
+    logger.info('Cloning %s to %s...', source, destination)
+    git.Repo.clone_from(source, destination)
 
 
 def _pull(repo, branch):
@@ -63,14 +63,12 @@ def _reduce_checked(list1, list2):
     return set([item for item in list1 if item not in list2])
 
 
-def _get_repo_path(meta):
-    repo_path = os.path.join(
+def _set_clone_path(meta):
+    return os.path.join(
         constants.CLONED_REPOS_PATH, meta.owner, meta.name)
-    return repo_path
 
 
-def _search_commit(branch, meta, commit, previous_commit, search_type='common', strings=None):
-    diff = previous_commit.diff(commit, create_patch=True)
+def _search_commit(branch, meta, commit, diff, search_type='common', strings=None):
     record = {
         'commit_sha': commit.hexsha,
         'commit_date': commit.committed_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
@@ -80,7 +78,7 @@ def _search_commit(branch, meta, commit, previous_commit, search_type='common', 
         'branch': branch.name,
         'repo': meta.name,
         'org': meta.owner,
-        'risks': [],
+        'found': [],
     }
     for index, blob in enumerate(diff):
         data = blob.diff.decode('utf-8', errors='replace')
@@ -93,25 +91,31 @@ def _search_commit(branch, meta, commit, previous_commit, search_type='common', 
             for key_type, expression in COMMON_EXPRESSIONS.items():
                 result = expression.findall(data)
                 if result:
-                    record['risks'].append(
-                        {'blob_url': blob_url, 'strings': result, 'type': key_type})
+                    record['found'].append({
+                        'blob_url': blob_url,
+                        'strings': result,
+                        'type': key_type
+                    })
         else:
             result = [s for s in strings if s in data]
             if result:
-                record['risks'].append(
-                    {'blob_url': blob_url, 'strings': result, 'type': 'custom'})
+                record['found'].append({
+                    'blob_url': blob_url,
+                    'strings': result,
+                    'type': 'custom'
+                })
 
     return record
 
 
-def _search_branches(repo, search_common=True):
+def _search_branches(repo, no_pull, skip_common=True):
     found = []
     searched = []
 
     for branch in _get_branches(repo):
         logger.info('Searching %s...', branch)
 
-        if not repo.cloned_now:
+        if not repo.cloned_now and not no_pull:
             _pull(repo, branch)
         branch_name = _get_branch_name(branch)
         _checkout(repo, branch, branch_name)
@@ -123,10 +127,10 @@ def _search_branches(repo, search_common=True):
             if not previous_commit:
                 pass
             else:
-                if search_common:
-                    record = _search_commit(
-                        branch, repo.meta, commit, previous_commit)
-                    if record.get('risks'):
+                if not skip_common:
+                    diff = previous_commit.diff(commit, create_patch=True)
+                    record = _search_commit(branch, repo.meta, commit, diff)
+                    if record.get('found'):
                         found.append(record)
             previous_commit = commit
 
@@ -135,41 +139,50 @@ def _search_branches(repo, search_common=True):
     return found
 
 
-def seekrets(repo_url, search_list=None, search_common=True, verbose=False):
+def seekrets(repo_url,
+             search_list=None,
+             skip_common=False,
+             no_pull=False,
+             verbose=False):
     """Search for a list of strings or secret oriented regex in a repo
 
     Example output:
 
-    {
-        [
-            {
-
-                "commit_sha": "b788a889e484d57451944f93e2b65ed425d6bf65",
-                "commit_date": "Wed Aug 24 11:11:56 2016",
-                "committer_email": "nir36g@gmail.com",
-                "committer_username": "nir0s",
-                "branch": "slack",
-                "repo": "ghost",
-                "owner": "nir0s",
-                "risks": [
-                    { "blob_url": "https://github.com/nir0s/ghost/blob/.../ghost.py", "string": "AKI..." },
-                    ...
-                ]
-            },
-        ],
+    [
+        {
+            "org": "nir0s"
+            "branch": "origin/master",
+            "repo": "ghost",
+            "committer_username": "nir0s",
+            "commit_msg": "Do something",
+            "committer_email": "w00t@w00t.com",
+            "commit_date": "2015-03-10T18:19:52",
+            "commit_sha": "a28004a2651f2d30ba4322f67f5ce951722059e5",
+            "found": [
+                {
+                    "type": "AWS Access Key ID",
+                    "blob_url": "https://github.com/nir0s/ghost/blob/.../ghost.py",
+                    "strings": [
+                        "AKIAJFLYGO6XOVXOXXXX"
+                    ]
+                }
+            ],
+        },
         ...
-    }
+    ]
     """
     meta = giturlparse.parse(repo_url)
-    clone = _get_repo_path(meta)
+
+    clone_path = _set_clone_path(meta)
     cloned_now = False
-    if not os.path.isdir(clone):
-        _clone(repo_url, clone)
+
+    if not os.path.isdir(clone_path):
+        _clone(source=repo_url, destination=clone_path)
         cloned_now = True
-    repo = git.Repo(clone)
+    repo = git.Repo(clone_path)
     repo.meta = meta
     repo.cloned_now = cloned_now
 
-    results = _search_branches(repo)
+    results = _search_branches(repo, no_pull)
     print(json.dumps(results, indent=4))
     return results
