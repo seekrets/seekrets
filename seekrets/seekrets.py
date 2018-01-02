@@ -36,12 +36,20 @@ search_string = click.option(
 search_common = click.option(
     '--skip-common',
     default=False,
+    is_flag=True,
     help='Whether to search for common patterns as well. Defaults to True')
 no_pull = click.option(
     '--no-pull',
     is_flag=True,
     default=False,
     help='Whether to skip pulling changes when the repository already exists')
+commit_id = click.option(
+    '-c',
+    '--commit-id',
+    multiple=True,
+    default=[],
+    help='Commit SHAs to search in. '
+         'This can be passed multiple times')
 verbose = click.option('-v', '--verbose', default=False, is_flag=True)
 
 
@@ -55,8 +63,9 @@ def main():
 @search_string
 @search_common
 @no_pull
+@commit_id
 @verbose
-def seekrets_repo(repo_url, string, skip_common, no_pull, verbose):
+def seekrets_repo(repo_url, string, skip_common, no_pull, commit_id, verbose):
     """Search a single repository.
     You can add user_name and password. Used seekrets like that:
 

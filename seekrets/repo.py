@@ -108,7 +108,7 @@ def _search_commit(branch, meta, commit, diff, search_type='common', strings=Non
     return record
 
 
-def _search_branches(repo, no_pull, skip_common=True):
+def _search_branches(repo, no_pull, skip_common=False):
     found = []
     searched = []
 
